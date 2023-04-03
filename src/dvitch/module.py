@@ -1,4 +1,3 @@
-from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
 from functools import partial
 from typing import Callable, Iterator, TypeVar
@@ -8,10 +7,9 @@ from jax import jit, value_and_grad
 from dvitch.parameter import Parameter, ParameterLike, INParameter, IParameter, DParams
 from dvitch.types import TTensorLike
 
-T = TypeVar("T")
 
-
-class Module(metaclass=ABCMeta):
+class Module:
+    T = TypeVar("T")
     _parameters: OrderedDict[str, "Parameter"]
     _modules: OrderedDict[str, "Module"]
     _buffers: OrderedDict[str, "TTensorLike"]
@@ -26,8 +24,8 @@ class Module(metaclass=ABCMeta):
         return ""
 
     @property
-    def props(self) -> str:
-        return ""
+    def props(self) -> dict:
+        return {}
 
     @property
     def training(self) -> bool:
@@ -39,7 +37,8 @@ class Module(metaclass=ABCMeta):
         for m in self.modules(include_children=False): m.training = mode
 
     def __repr__(self):
-        return f"<{self.classname}{f':{self.name}' if self.name else ''}[{self.props}]>"
+        props = ", ".join(f"{k}={v}" for k, v in self.props.items())
+        return f"<{self.classname}{f':{self.name}' if self.name else ''}[{props}]>"
 
     def __str__(self):
         return self.__repr__()
@@ -125,6 +124,7 @@ class Module(metaclass=ABCMeta):
     def add_module(self, name: str, module: "Module"):
         assert name and isinstance(name, str), \
             f"Argument 'name' must be a non empty 'str'"
+        assert "." not in name
         assert module is None or isinstance(module, Module), \
             f"Argument 'module' must be of type '{Module}' or 'None', not {type(module)}"
         assert name not in self._modules, \
@@ -142,6 +142,7 @@ class Module(metaclass=ABCMeta):
     def register_parameter(self, name: str, parameter: "ParameterLike"):
         assert name and isinstance(name, str), \
             f"Argument 'name' must be a non empty 'str'"
+        assert "." not in name
         assert isinstance(parameter, ParameterLike), \
             f"Argument 'parameter' must be of type '{ParameterLike}', not {type(parameter)}"
         assert name not in self._parameters, \
@@ -160,6 +161,7 @@ class Module(metaclass=ABCMeta):
     def register_buffer(self, name: str, buffer: "TTensorLike"):
         assert name and isinstance(name, str), \
             f"Argument 'name' must be a non empty 'str'"
+        assert "." not in name
         assert buffer is None or isinstance(buffer, TTensorLike), \
             f"Argument 'buffer' must be of type '{TTensorLike}' or 'None', not {type(buffer)}"
         assert name not in self._buffers, \
@@ -238,8 +240,28 @@ class Module(metaclass=ABCMeta):
         for _, buffer in self.named_buffers(recursive=recursive):
             yield buffer
 
-    @abstractmethod
     def forward(self, params: "DParams", buffs, inputs):
+        try:
+            return self.forward_nb(params, inputs)
+        except NotImplementedError:
+            pass
+        try:
+            return self.forward_np(buffs, inputs)
+        except NotImplementedError:
+            pass
+        try:
+            return self.forward_nm(inputs)
+        except NotImplementedError:
+            pass
+        raise NotImplementedError
+
+    def forward_np(self, buffs, inputs):
+        raise NotImplementedError
+
+    def forward_nb(self, params: "DParams", inputs):
+        raise NotImplementedError
+
+    def forward_nm(self, inputs):
         raise NotImplementedError
 
     @partial(jit, static_argnums=(0,))

@@ -8,19 +8,20 @@ from ..types import TShapeLike
 
 class Initializer:
     _seed: int
-    _rng: "jax.random.PRNGKey"
+    _key: "jax.random.PRNGKey"
 
     @property
-    def props(self) -> str:
-        return ""
+    def props(self) -> dict:
+        return {}
 
     @property
     def seed(self) -> int:
         return self._seed
 
     def __repr__(self):
-        seed = self.seed
-        return f"<Initializer:{type(self).__name__}[{seed=}, {self.props}]>"
+        (props := self.props).update(seed=self.seed)
+        props = ", ".join(f"{k}={v}" for k, v in props.items())
+        return f"<Initializer:{type(self).__name__}[{props}]>"
 
     def __init__(self, seed: int = None, *args, **kwargs):
         if args: raise TypeError(
@@ -30,14 +31,16 @@ class Initializer:
             f"{type(self).__name__}.__init__() got unexpected keyword argument '{next(iter(kwargs))}'"
         )
 
-        if seed is None: seed = int(np.random.randint(0, 1 << 32 - 1))
-        self._rng = jax.random.PRNGKey(seed)
+        if seed is None:
+            from dvitch.rand_seed import rand_seed
+            seed = rand_seed()
+        self._key = jax.random.PRNGKey(seed)
         self._seed = seed
 
     def __call__(self, *shape: "TShapeLike"):
-        self._rng, rng = jax.random.split(self._rng)
-        return self._initialize(shape, rng)
+        self._key, key = jax.random.split(self._key)
+        return self._initialize(shape, key)
 
     @abstractmethod
-    def _initialize(self, shape: "TShapeLike", rng: "jax.random.PRNGKey"):
+    def _initialize(self, shape: "TShapeLike", key: "jax.random.PRNGKey"):
         raise NotImplementedError

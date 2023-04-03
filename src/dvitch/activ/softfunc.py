@@ -15,18 +15,18 @@ class SoftMax(Module):
         super().__init__()
         self._axis = axis
 
-    def forward(self, _, __, x):
+    def forward_nm(self, x):
         x_max = jnp.max(x, self._axis, keepdims=True, initial=0)
         un_norm = jnp.exp(x - lax.stop_gradient(x_max))
         return un_norm / jnp.sum(un_norm, self._axis, keepdims=True, initial=0)
 
 
 class SoftPlus(Module):
-    def forward(self, _, __, x):
+    def forward_nm(self, x):
         x_max = jnp.max(x, keepdims=True, initial=0)
         return lax.log(lax.add(1., lax.exp(x - lax.stop_gradient(x_max))))
 
 
 class SoftSign(Module):
-    def forward(self, _, __, x):
+    def forward_nm(self, x):
         return lax.div(x, lax.add(1., lax.abs(x)))

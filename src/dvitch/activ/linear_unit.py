@@ -1,12 +1,12 @@
-from jax import lax, ShapeDtypeStruct
+import jax
+from jax import lax
 from jax.experimental import host_callback
 
 from ..module import Module
-from ..init import Uniform
 
 
 class ReLU(Module):
-    def forward(self, _, __, x):
+    def forward_nm(self, x):
         return lax.select(x > 0, x, lax.zeros_like_array(x))
 
 
@@ -19,7 +19,7 @@ class LeakyReLU(Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, _, __, x):
+    def forward_nm(self, x):
         return lax.select(x > 0, x, lax.mul(1e-2, x))
 
 
@@ -36,13 +36,15 @@ class PReLu(Module):
         super().__init__()
         self._negative_slope = float(negative_slope)
 
-    def forward(self, _, __, x):
+    def forward_nm(self, x):
         return lax.select(x > 0, x, lax.mul(self._negative_slope, x))
 
 
 class RReLU(Module):
     _lower: float
     _upper: float
+    _seed: int
+    _key: jax.random.PRNGKey
 
     @property
     def props(self) -> str:
@@ -50,17 +52,28 @@ class RReLU(Module):
         upper = self._upper
         return f"{lower=}, {upper=}"
 
-    def __init__(self, lower: float = 0.125, upper: float = 0.3333333333333333):
+    def __init__(self, lower: float = 1 / 8, upper: float = 1 / 3, seed: int = None):
         assert isinstance(lower, (float, int)) and lower > 0
         assert isinstance(upper, (float, int)) and upper > 0
+        assert lower < upper
+        if seed is None:
+            from dvitch.rand_seed import rand_seed
+            seed = rand_seed()
         super().__init__()
         self._lower = float(lower)
         self._upper = float(upper)
-        self._rand = Uniform(self._lower, self._upper)
+        self._seed = int(seed)
+        self.register_buffer("_key", jax.random.PRNGKey(seed))
 
-    def forward(self, _, __, x):
-        rnd = host_callback.call(lambda x_: self._rand(*x.shape), x, result_shape=ShapeDtypeStruct(x.shape, x.dtype))
-        return lax.select(x > 0, x, lax.mul(rnd, x))
+    def change_key(self, key):
+        self._key = key
+
+    def forward_np(self, buffs, x):
+        key = buffs.pop("_key")
+        key, subkey = jax.random.split(key)
+        host_callback.id_tap(lambda k, _: self.change_key(k), key)
+        rand = jax.random.uniform(subkey, x.shape, minval=self._lower, maxval=self._upper)
+        return lax.select(x > 0, x, lax.mul(rand, x))
 
 
 class ELU(Module):
@@ -76,7 +89,7 @@ class ELU(Module):
         super().__init__()
         self._alpha = float(alpha)
 
-    def forward(self, _, __, x):
+    def forward_nm(self, x):
         return lax.select(x > 0, x, lax.mul(self._alpha, lax.sub(lax.exp(x), 1)))
 
 
@@ -101,7 +114,7 @@ class SELU(Module):
         self._alpha = float(alpha)
         self._scale = float(scale)
 
-    def forward(self, _, __, x):
+    def forward_nm(self, x):
         return lax.select(x > 0,
                           lax.mul(self._scale, x),
                           lax.mul(lax.mul(self._scale, self._alpha), lax.sub(lax.exp(x), 1)))

@@ -9,10 +9,8 @@ class Normal(Initializer):
     _stddev: float
 
     @property
-    def props(self) -> str:
-        mean = self._mean
-        stddev = self._stddev
-        return f"{mean=}, {stddev=}"
+    def props(self) -> dict:
+        return dict(mean=self._mean, stddev=self._stddev)
 
     def __init__(self, mean: float = 0.0, stddev: float = 1.0, *args, **kwargs):
         assert isinstance(mean, (float, int))
@@ -21,5 +19,5 @@ class Normal(Initializer):
         self._mean = mean
         self._stddev = stddev
 
-    def _initialize(self, shape: "TShapeLike", rng: "jax.random.PRNGKey"):
-        return jax.random.normal(rng, shape) * self._stddev + self._mean
+    def _initialize(self, shape: "TShapeLike", key: "jax.random.PRNGKey"):
+        return jax.random.normal(key, shape) * self._stddev + self._mean

@@ -1,7 +1,4 @@
-from abc import ABCMeta, abstractmethod
-
-
-class Loss(metaclass=ABCMeta):
+class Loss:
     @property
     def props(self):
         return ""
@@ -12,6 +9,5 @@ class Loss(metaclass=ABCMeta):
     def __call__(self, outputs, *args, **kwargs):
         return self._loss(outputs, *args, **kwargs)
 
-    @abstractmethod
-    def _loss(self, outputs, *args, **kwargs):
+    def _loss(self, outputs, targets, *args, **kwargs):
         raise NotImplementedError

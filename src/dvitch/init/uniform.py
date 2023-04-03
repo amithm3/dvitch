@@ -9,10 +9,8 @@ class Uniform(Initializer):
     _maxval: float
 
     @property
-    def props(self) -> str:
-        minval = self._minval
-        maxval = self._maxval
-        return f"{minval=}, {maxval=}"
+    def props(self) -> dict:
+        return dict(minval=self._minval, maxval=self._maxval)
 
     def __init__(self, minval: float = 0, maxval: float = 1, *args, **kwargs):
         assert isinstance(minval, (float, int))
@@ -21,5 +19,5 @@ class Uniform(Initializer):
         self._minval = minval
         self._maxval = maxval
 
-    def _initialize(self, shape: "TShapeLike", rng: "jax.random.PRNGKey"):
-        return jax.random.uniform(rng, shape, minval=self._minval, maxval=self._maxval)
+    def _initialize(self, shape: "TShapeLike", key: "jax.random.PRNGKey"):
+        return jax.random.uniform(key, shape, minval=self._minval, maxval=self._maxval)

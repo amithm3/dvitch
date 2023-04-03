@@ -28,7 +28,7 @@ class Linear(Module):
         self.weight.data = self.initializer(self.out_features, self.in_features)
         if self.bias is not None: self.bias.data = self.initializer(self.out_features)
 
-    def forward(self, params: "DParams", buffs, inputs):
+    def forward_nb(self, params: "DParams", inputs):
         weight = params["weight"]
         if self.bias is not None:
             bias = params["bias"]
