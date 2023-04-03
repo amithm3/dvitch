@@ -15,6 +15,7 @@ class Module(metaclass=ABCMeta):
     _parameters: OrderedDict[str, "Parameter"]
     _modules: OrderedDict[str, "Module"]
     _buffers: OrderedDict[str, "TTensorLike"]
+    _training: bool
 
     @property
     def classname(self) -> str:
@@ -27,6 +28,15 @@ class Module(metaclass=ABCMeta):
     @property
     def props(self) -> str:
         return ""
+
+    @property
+    def training(self) -> bool:
+        return self._training
+
+    @training.setter
+    def training(self, mode: bool):
+        self._training = mode
+        for m in self.modules(include_children=False): m.training = mode
 
     def __repr__(self):
         return f"<{self.classname}{f':{self.name}' if self.name else ''}[{self.props}]>"
@@ -45,11 +55,12 @@ class Module(metaclass=ABCMeta):
         super().__setattr__("_parameters", OrderedDict())
         super().__setattr__("_modules", OrderedDict())
         super().__setattr__("_buffers", OrderedDict())
+        super().__setattr__("_training", False)
 
     def __setattr__(self, key, value):
         if isinstance(value, Parameter):
             if key in self._parameters:
-                self._parameters[key].update(value)
+                self._parameters[key].data = value.data
                 return
             self.register_parameter(key, value)
         elif isinstance(value, Module):
@@ -97,11 +108,19 @@ class Module(metaclass=ABCMeta):
 
         return param
 
-    @staticmethod
-    def decompose_params(params: DParams, prefix: str):
-        for key, param in params.items():
+    @classmethod
+    def decompose_params(cls, params: DParams, prefix: str):
+        return cls.decompose_members(params, prefix)
+
+    @classmethod
+    def decompose_buffs(cls, buffs, prefix: str):
+        return cls.decompose_params(buffs, prefix)
+
+    @classmethod
+    def decompose_members(cls, members, prefix: str):
+        for key, member in members.items():
             if key.startswith(prefix):
-                yield key.removeprefix(prefix + '.'), param
+                yield key.removeprefix(prefix + '.'), member
 
     def add_module(self, name: str, module: "Module"):
         assert name and isinstance(name, str), \
@@ -180,12 +199,12 @@ class Module(metaclass=ABCMeta):
             recursive: bool = True,
             remove_duplicates: bool = False,
     ) -> Iterator[tuple[str, T]]:
-        memo = set()
+        # memo = set()
         for module_prefix, module in self.named_modules(prefix, include_self=True, include_children=recursive):
             members = get_members_fn(module)
             for key, member in members:
-                if remove_duplicates and member in memo: continue
-                memo.add(member)
+                # if remove_duplicates and member in memo: continue
+                # memo.add(member)
                 submodule_prefix = f"{module_prefix}.{key}" if module_prefix else key
                 yield submodule_prefix, member
 
@@ -220,22 +239,33 @@ class Module(metaclass=ABCMeta):
             yield buffer
 
     @abstractmethod
-    def __forward__(self, params: DParams, inputs):
+    def forward(self, params: "DParams", buffs, inputs):
         raise NotImplementedError
 
+    @partial(jit, static_argnums=(0,))
+    def __forward__(self, params: "DParams", buffs, inputs):
+        return self.forward(params, buffs, inputs)
+
     def __call__(self, inputs):
-        return self.__forward__(dict(self.named_parameters()), inputs)
+        params = dict(self.named_parameters())
+        buffs = dict(self.named_buffers())
+        return self.__forward__(params, buffs, inputs)
 
-    @partial(jit, static_argnums=(0, 2))
-    def __grad__(self, params: DParams, scalar_function, inputs, *args, **kwargs):
+    @partial(jit, static_argnums=(0, 3))
+    def __grad__(self, params: "DParams", buffs, scalar_function, inputs, *args, **kwargs):
         @value_and_grad
-        def _func(_params: DParams, *_args, **_kwargs):
-            return scalar_function(self.__forward__(_params, inputs), *_args, **_kwargs)
+        def _func(_params: DParams, _buffs, *_args, **_kwargs):
+            return scalar_function(self.forward(_params, _buffs, inputs), *_args, **_kwargs)
 
-        return _func(params, *args, **kwargs)
+        return _func(params, buffs, *args, **kwargs)
 
     def grad(self, scalar_function, inputs, *args, **kwargs):
-        return self.__grad__(dict(self.named_parameters()), scalar_function, inputs, *args, **kwargs)
+        params = dict(self.named_parameters())
+        buffs = dict(self.named_buffers())
+        return self.__grad__(params, buffs, scalar_function, inputs, *args, **kwargs)
+
+    def train(self, mode: bool = True):
+        self.training = mode
 
 
 IModule = Iterator[Module]

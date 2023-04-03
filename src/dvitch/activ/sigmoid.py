@@ -20,6 +20,6 @@ class Sigmoid(Module):
         self._smooth = float(smooth)
         self._offset = float(offset)
 
-    def __forward__(self, _, x):
+    def forward(self, _, __, x):
         exp = lax.exp(lax.add(lax.mul(lax.neg(self._smooth), x), self._offset))
         return lax.div(1., lax.add(1., exp))
