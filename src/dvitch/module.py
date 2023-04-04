@@ -4,8 +4,8 @@ from typing import Callable, Iterator, TypeVar
 
 from jax import jit, value_and_grad
 
-from dvitch.parameter import Parameter, ParameterLike, INParameter, IParameter, DParams
-from dvitch.types import TTensorLike
+from .parameter import Parameter, ParameterLike, INParameter, IParameter, DParams
+from .types import TTensorLike
 
 
 class Module:
@@ -102,8 +102,8 @@ class Module:
         if not hasattr(module, param_name):
             raise AttributeError(f"{type(module).__name__} object has no attribute '{param_name}'")
         param = getattr(module, param_name)
-        if not isinstance(param, Parameter):
-            raise TypeError(f"'{param_name}' is not a Parameter")
+        if not isinstance(param, ParameterLike):
+            raise TypeError(f"attribute '{param_name}' is not a Parameter")
 
         return param
 
@@ -147,7 +147,7 @@ class Module:
             f"Argument 'parameter' must be of type '{ParameterLike}', not {type(parameter)}"
         assert name not in self._parameters, \
             f"Parameter named '{name}' already exists"
-        if not isinstance(parameter, Parameter): parameter = Parameter(parameter)
+        if not isinstance(parameter, Parameter) and parameter is not None: parameter = Parameter(parameter)
         if not hasattr(self, "_parameters"): raise AttributeError(
             f"Cannot assign Parameter to {type(self)} before it has been initialized"
         )
@@ -194,6 +194,7 @@ class Module:
         for _, module in self.named_modules(include_children=include_children):
             yield module
 
+    # fixme: argument: remove_duplicates has hashing conflicts with buffers
     def _named_members(
             self,
             get_members_fn: Callable[["Module"], dict[str, T]],

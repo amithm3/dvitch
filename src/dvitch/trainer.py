@@ -1,44 +1,62 @@
+from tqdm import tqdm
+
+from . import Module
+
+
 class Trainer:
-    def __init__(self, model, loss_fn):
+    ebar: "tqdm"
+    bbar: "tqdm"
+
+    def __init__(
+            self,
+            epochs: int,
+            batches: int,
+            model: "Module",
+            *,
+            notebook: bool = None,
+    ):
+        if notebook is None:
+            try:
+                _ = get_ipython  # type: ignore
+                notebook = True
+            except NameError:
+                notebook = False
+        self.epochs = epochs
+        self.batches = batches
         self.model = model
-        self.loss_fn = loss_fn
+
+        if notebook:
+            from tqdm.notebook import tqdm, trange
+        else:
+            from tqdm import tqdm, trange
+        self.trange = trange
+        self.tqdm = tqdm
+
+    def __iter__(self):
+        with self:
+            for e in self.ebar:
+                self.bbar.reset()
+                self.bbar.last_print = 0
+                for b in range(self.batches):
+                    self.bbar.update(1)
+                    yield e, b
+                self.bbar.refresh()
+                postfix = self.bbar.postfix
+                self.ebar.set_postfix_str(postfix if postfix is not None else "")
 
     def __enter__(self):
+        self.ebar = self.trange(self.epochs, desc="Epochs", unit="epoch",
+                                position=0, leave=True)
+        self.bbar = self.trange(self.batches, desc="Batches", unit="batch",
+                                position=1, leave=True)
+        self.ebar.__enter__()
+        self.bbar.__enter__()
         self.model.training = True
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.model.training = False
-
-    def __call__(self, *args, **kwargs):
-        pass
-
-
-def train_printer(
-        trainer: "Trainer",
-        epochs: int,
-        batches: int,
-        interval: float = 0.5,
-        *,
-        notebook: bool = False
-):
-    if notebook:
-        from tqdm.notebook import tqdm, trange
-    else:
-        from tqdm import tqdm, trange
-
-    ebar = trange(epochs, desc="Epochs", unit="epoch", position=0, leave=True)
-    bbar = tqdm(total=batches, desc="Batches", unit="batch", position=1, leave=True)
-
-    with bbar:
-        for e in ebar:
-            bbar.reset()
-            bbar.last_print = 0
-            for b in range(batches):
-                bbar.update(1)
-                props = trainer(e, b)
-                if (curr := bbar.format_dict["elapsed"]) - bbar.last_print > interval:
-                    bbar.last_print = curr
-                    bbar.set_postfix(**props)
-            bbar.refresh()
-            ebar.set_postfix(**props)
+        self.bbar.__exit__(exc_type, exc_val, exc_tb)
+        del self.bbar
+        self.ebar.__exit__(exc_type, exc_val, exc_tb)
+        del self.ebar

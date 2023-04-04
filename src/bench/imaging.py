@@ -16,7 +16,7 @@ def show_sample(images, labels, *, rows=4, cols=6, figsize=(5, 5)):
     plt.show()
 
 
-def show_image(image, label, figsize=(5, 5)):
+def show_image(image, label="", figsize=(5, 5)):
     fig, ax = plt.subplots(figsize=figsize)
     ax.imshow(image, cmap='gray')
     ax.set_title(str(label))

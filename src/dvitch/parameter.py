@@ -4,7 +4,7 @@ from typing import Union, Iterator
 import jax
 import jax.numpy as jnp
 
-from dvitch.types import TTensor, TTensorLike
+from .types import TTensor, TTensorLike
 
 
 class _ParameterMeta(ABCMeta):
@@ -13,7 +13,7 @@ class _ParameterMeta(ABCMeta):
 
 
 class Parameter(metaclass=_ParameterMeta):
-    _data: Union["TTensor", None]
+    _data: "TTensor"
     _name: str
 
     @property
@@ -27,20 +27,16 @@ class Parameter(metaclass=_ParameterMeta):
     @data.setter
     def data(self, value: TTensor):
         assert isinstance(value, TTensor)
-        if self._data is None:
-            self._data = value
-            return
         assert value.shape == self._data.shape
         assert value.dtype == self._data.dtype
         self._data = value
 
     def __repr__(self):
-        shape = ()
-        if self._data is not None: shape = self._data.shape
+        shape = self._data.shape
         return f"<Parameter{f':{self.name}' if self.name else ''}{[*shape]}>"
 
-    def __init__(self, data: Union["TTensor", None], name: str = None, *, safe_copy: bool = True):
-        if safe_copy and data is not None:
+    def __init__(self, data: "TTensor", name: str = None, *, safe_copy: bool = True):
+        if safe_copy:
             self._data = jnp.copy(data).astype(jnp.float32)
         else:
             self._data = data
@@ -58,7 +54,7 @@ class Parameter(metaclass=_ParameterMeta):
 
 jax.tree_util.register_pytree_node(Parameter, Parameter._tree_flatten, Parameter._tree_unflatten)
 
-ParameterLike = Union[Parameter, TTensorLike]
+ParameterLike = Union[Parameter, TTensorLike, None]
 INParameter = Iterator[tuple[str, Parameter]]
 DParams = dict[str, Parameter]
 IParameter = Iterator[Parameter]

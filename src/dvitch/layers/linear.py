@@ -1,3 +1,5 @@
+from jax import numpy as jnp
+
 from .. import init
 from ..init import Initializer
 from ..module import Module
@@ -9,7 +11,6 @@ class Linear(Module):
             self,
             in_features: int,
             out_features: int,
-            *,
             use_bias: bool = True,
             initializer: "Initializer" = None,
     ):
@@ -19,18 +20,20 @@ class Linear(Module):
         self.out_features = out_features
         self.initializer = initializer
 
-        self.weight = Parameter(None, "weight")
-        if use_bias: self.bias = Parameter(None, name="bias")
-        else: self.bias = None
-        self.__init_params__()
+        self.weight = Parameter(jnp.zeros((out_features, in_features)), name="weight")
+        if use_bias:
+            self.bias = Parameter(jnp.zeros(out_features), name="bias")
+        else:
+            self.register_parameter("bias", None)
+        self.reset_parameters()
 
-    def __init_params__(self):
+    def reset_parameters(self):
         self.weight.data = self.initializer(self.out_features, self.in_features)
         if self.bias is not None: self.bias.data = self.initializer(self.out_features)
 
     def forward_nb(self, params: "DParams", inputs):
-        weight = params["weight"]
-        if self.bias is not None:
-            bias = params["bias"]
+        weight = params.pop("weight")
+        bias = params.pop("bias")
+        if bias is not None:
             return inputs @ weight.data.T + bias.data
         return inputs @ weight.data.T
